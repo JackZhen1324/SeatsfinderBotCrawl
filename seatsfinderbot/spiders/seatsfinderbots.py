@@ -177,7 +177,9 @@ class SeatsfinderbotsSpider(scrapy.Spider):
                 if statusAdd == 'SuccessEnrolled':
                     print('success')
                 else:
-                    request = scrapy.Request(self.start_urls[0], callback=self.parse, dont_filter=True)
+                    request = self.send_check_request(str(self.checkURL), str(self.semester), str(self.section),
+                                                      str(self.reserved))
+                    #yield request
 
                     # yield request
             if self.choice == "swap":
@@ -189,7 +191,9 @@ class SeatsfinderbotsSpider(scrapy.Spider):
                 if statusSwap == 'SuccessEnrolled':
                     print('success')
                 else:
-                    request = scrapy.Request(self.start_urls[0], callback=self.parse, dont_filter=True)
+                    request = self.send_check_request(str(self.checkURL), str(self.semester), str(self.section),
+                                                      str(self.reserved))
+                    #yield request
 
                     # yield request
             # logging.info("Checked on " + currTimeInSec + ", the class is OPEN")
@@ -202,21 +206,24 @@ class SeatsfinderbotsSpider(scrapy.Spider):
             time.sleep(float(self.timeInterval))
             print(
                 "Checked on " + currTimeInSec + ", the class is NOT FOUND")
-            request = scrapy.Request(url=self.start_urls[0], callback=self.parse, dont_filter=True)
+            request = self.send_check_request(str(self.checkURL), str(self.semester), str(self.section),
+                                              str(self.reserved))
             yield request
         elif "ERRORURL" in str(contents):
             status = "HTTP ERROR on " + currTimeInSec + " "
             self.update_databse(status)
             time.sleep(float(self.timeInterval))
             print("HTTP ERROR on " + currTimeInSec + " ")
-            request = scrapy.Request(url=self.start_urls[0], callback=self.parse, dont_filter=True)
+            request = self.send_check_request(str(self.checkURL), str(self.semester), str(self.section),
+                                              str(self.reserved))
             yield request
         else:
             status = "OTHER ERROR on " + currTimeInSec + " "
             self.update_databse(status)
             time.sleep(float(self.timeInterval))
             print("OTHER ERROR on " + currTimeInSec + " ")
-            request = scrapy.Request(url=self.start_urls[0], callback=self.parse, dont_filter=True)
+            request = self.send_check_request(str(self.checkURL), str(self.semester), str(self.section),
+                                              str(self.reserved))
             yield request
 
     def get_local_time(self):
