@@ -23,50 +23,62 @@ import os
 import traceback
 from apns2.client import APNsClient
 from apns2.payload import Payload
-
+import json
 count = 1
 isDuo = 0
-class SeatsfinderbotsSpider(scrapy.Spider):
 
+
+class SeatsfinderbotsSpider(scrapy.Spider):
     name = 'seatsfinderbots'
-    allowed_domains = ['asu.edu']
+    allowed_domains = ['*']
     config = {
-    'apiKey': "AIzaSyBPE9nfY4BG4P6Q5lxVkVSVElgQrRLKgV0",
-    'authDomain': "seatsfinderbot.firebaseapp.com",
-    'databaseURL': "https://seatsfinderbot.firebaseio.com",
-    'projectId': "seatsfinderbot",
-    'storageBucket': "seatsfinderbot.appspot.com",
-    'messagingSenderId': "427671677247"
-        };
+        'apiKey': "AIzaSyBPE9nfY4BG4P6Q5lxVkVSVElgQrRLKgV0",
+        'authDomain': "seatsfinderbot.firebaseapp.com",
+        'databaseURL': "https://seatsfinderbot.firebaseio.com",
+        'projectId': "seatsfinderbot",
+        'storageBucket': "seatsfinderbot.appspot.com",
+        'messagingSenderId': "427671677247"
+    };
     firebase = pyrebase.initialize_app(config)
     auth2 = firebase.auth()
     database = firebase.database()
-
+    Coursestatus = ""
     statusURL = "http://72.201.206.220:8001/api/WebAPI?GetSuperPowerVMTaskSchedulerStatus=true&guid="
     checkURL = "http://72.201.206.220:8001/api/WebAPI?checkStatusByBot=true&prefix=&number=&location=Tempe&term="
     superPowerStatusURL = "http://72.201.206.220:8001/api/WebAPI?registerStatusNotify=true&status="
-
+    url = "http://72.201.206.220:8000/CheckCourseStatus/"
     myEmail = "mopjtv@gmail.com"
     start_urls = ['']
     deviceId = ""
-    def update_databse(self,message):
+
+    def update_databse(self, message):
         try:
             status = message
             data = {"logs": status, "coueseId": self.section, "jobId": os.environ['SCRAPY_JOB'], "mode": self.choice,
                     "user": self.username, "count": count, "instructor": self.instructor, "courseID": self.courseID,
                     "deviceID": self.deviceID, "password": self.password, "semester": self.semester}
-            userID  = str(self.username)
-            userID.replace("\"","")
+            userID = str(self.username)
+            userID.replace("\"", "")
             self.database.child("users").child(self.username).child("courses").child(self.section).set(data)
         except:
             logging.info("fail to contact with firebase!!")
-    def send_Notification(self,message, key, device_id):
+
+    def send_Notification(self, message, key, device_id):
 
         token_hex = device_id
         payload = Payload(alert=message, sound="default", badge=1)
         topic = 'ASU.SeatsFinderBot'
         client = APNsClient(key, use_sandbox=False, use_alternative_port=False)
         client.send_notification(token_hex, payload, topic)
+    def send_check_request(self,checkURL,semester,section,reserved):
+        my_data = {'checkURL': str(self.checkURL), 'semester': str(self.semester), 'section': str(self.section)}
+        # request = scrapy.Request(url=self.start_urls[0], callback=self.parse)
+        request = scrapy.Request(self.url, method='POST',
+                                 body=json.dumps(my_data),
+                                 headers={'Content-Type': 'application/json'},dont_filter=True,callback=self.parse)
+        logging.info("help")
+        return request
+
 
     def start_requests(self):
         global isDuo
@@ -79,10 +91,17 @@ class SeatsfinderbotsSpider(scrapy.Spider):
         logging.info('start')
         self.update_databse("")
 
-        self.start_urls = [str(self.checkURL) + str(self.semester) + "&sectionNumber=" + str(self.section) + "&reservedSeats=" + str(self.reserved)]
-        request = scrapy.Request(url=self.start_urls[0], callback=self.parse)
-        
+        self.start_urls = [
+            str(self.checkURL) + str(self.semester) + "&sectionNumber=" + str(self.section) + "&reservedSeats=" + str(
+                self.reserved)]
+        my_data = {'checkURL':  str(self.checkURL) , 'semester': str(self.semester),'section': str(self.section)  }
+        #request = scrapy.Request(url=self.start_urls[0], callback=self.parse)
+
+        request = self.send_check_request(str(self.checkURL),str(self.semester),str(self.section),str(self.reserved))
+
+
         yield request
+
     def parse(self, response):
         global isDuo
         global count
@@ -90,40 +109,40 @@ class SeatsfinderbotsSpider(scrapy.Spider):
         count = count + 1
         currTime = self.get_local_time()
         currTimeInSec = self.get_local_time_inSec()
-        #logging.info("start parsing: "+currTime)
-        currenturl = str(self.checkURL) + str(self.semester) + "&sectionNumber=" + str(self.section) + "&reservedSeats=" + str(self.reserved)
+        # logging.info("start parsing: "+currTime)
+        currenturl = str(self.checkURL) + str(self.semester) + "&sectionNumber=" + str(
+            self.section) + "&reservedSeats=" + str(self.reserved)
 
-        #data = {"logs": status,"coueseId":self.section,"jobId":os.environ['SCRAPY_JOB'],"mode":self.choice,"user":self.username}
-        #self.database.child("users").child(self.username).child("courses").child(self.section).set(data)
-        print (currenturl)
-        contents =  response.body
-        #logging.info(contents)
-        print ("******")
-        print (contents)
-        print ("******")
-
-        
+        # data = {"logs": status,"coueseId":self.section,"jobId":os.environ['SCRAPY_JOB'],"mode":self.choice,"user":self.username}
+        # self.database.child("users").child(self.username).child("courses").child(self.section).set(data)
+        print(currenturl)
+        contents = response.body
+        # logging.info(contents)
+        print("******")
+        print(contents)
+        print("******")
 
         if "FULL" in str(contents):
-            status ="Checked on " + currTimeInSec + ", the class is FULL"
-            #logging.info("Checked on " + currTimeInSec + ", the class is FULL")
+            status = "Checked on " + currTimeInSec + ", the class is FULL"
+            # logging.info("Checked on " + currTimeInSec + ", the class is FULL")
             print("Checked on " + currTimeInSec + ", the class is FULL ")
             self.update_databse(status)
             time.sleep(float(self.timeInterval))
             if str(self.choice) == "swap":
-
-                request = scrapy.Request(url=self.start_urls[0], callback=self.parse,dont_filter = True)
+                #request = scrapy.Request(url=self.start_urls[0], callback=self.parse, dont_filter=True)
+                request = self.send_check_request(str(self.checkURL), str(self.semester), str(self.section),
+                                                  str(self.reserved))
                 yield request
 
             if str(self.choice) == "add":
-
-                request = scrapy.Request(self.start_urls[0], callback=self.parse,dont_filter = True)
-
+                #request = scrapy.Request(self.start_urls[0], callback=self.parse, dont_filter=True)
+                request = self.send_check_request(str(self.checkURL), str(self.semester), str(self.section),
+                                                  str(self.reserved))
                 yield request
 
-    
+
         elif "OPEN" in str(contents):
-            status ="Checked on " + currTimeInSec + ", the class is OPEN"
+            status = "Checked on " + currTimeInSec + ", the class is OPEN"
             self.update_databse(status)
             global deviceId
             try:
@@ -132,23 +151,26 @@ class SeatsfinderbotsSpider(scrapy.Spider):
                 deviceId = "e4d3e8cb6e8c29d0dd6af4926e698c69632e2a8965cd17d66ed2d0cdd7869269"
 
             try:
-                self.send_Notification("Course "+self.section+" is available now, please check out.","apns-push_sf-cert.pem",deviceId)
+                self.send_Notification("Course " + self.section + " is available now, please check out.",
+                                       "apns-push_sf-cert.pem", deviceId)
                 logging.info("send notification success")
                 print("send notification success")
             except:
                 traceback.print_exc()
                 print("fail to send notification")
                 logging.info("fail to send notification")
-            #self.database.child("users").child(self.username).child("courses").child(self.section).set(data)
+            # self.database.child("users").child(self.username).child("courses").child(self.section).set(data)
             time.sleep(float(self.timeInterval))
             if self.choice == "swap":
-                self.urlErrorCheck(self.statusURL + 'ZhenAdmin' + "&taskID=" + str(self.section) + "&time=" + currTime + "&status=OPEN")
+                self.urlErrorCheck(self.statusURL + 'ZhenAdmin' + "&taskID=" + str(
+                    self.section) + "&time=" + currTime + "&status=OPEN")
             if self.choice == "add":
                 self.urlErrorCheck(self.statusURL + 'ZhenAdmin' + "&taskID=" + str(self.section) +
-                              "&time=" + currTime + "&status=OPEN")
+                                   "&time=" + currTime + "&status=OPEN")
             if self.choice == "add":
-                print(self.level,self.username,self.password,self.section,self.semester)
-                statusAdd = self.addClass(self.level,self.username,self.password,self.section,self.semester,currTimeInSec)
+                logging.info("Checked on " + currTimeInSec + ", the class is OPEN")
+                statusAdd = self.addClass(self.level, self.username, self.password, self.section, self.semester,
+                                          currTimeInSec)
 
                 self.urlErrorCheck(
                     self.superPowerStatusURL + statusAdd + "&email=" + self.myEmail + "&guid=" + 'ZhenAdmin' + "&section=" + self.section)
@@ -157,9 +179,10 @@ class SeatsfinderbotsSpider(scrapy.Spider):
                 else:
                     request = scrapy.Request(self.start_urls[0], callback=self.parse, dont_filter=True)
 
-                    #yield request
+                    # yield request
             if self.choice == "swap":
-                statusSwap = self.swapClass(self.level,self.username,self.password,self.section,self.swapWith,self.semester,currTimeInSec)
+                statusSwap = self.swapClass(self.level, self.username, self.password, self.section, self.swapWith,
+                                            self.semester, currTimeInSec)
 
                 self.urlErrorCheck(
                     self.superPowerStatusURL + statusSwap + "&email=" + self.myEmail + "&guid=" + 'ZhenAdmin' + "&section=" + self.section)
@@ -168,8 +191,8 @@ class SeatsfinderbotsSpider(scrapy.Spider):
                 else:
                     request = scrapy.Request(self.start_urls[0], callback=self.parse, dont_filter=True)
 
-                    #yield request
-            #logging.info("Checked on " + currTimeInSec + ", the class is OPEN")
+                    # yield request
+            # logging.info("Checked on " + currTimeInSec + ", the class is OPEN")
 
 
 
@@ -178,45 +201,44 @@ class SeatsfinderbotsSpider(scrapy.Spider):
             self.update_databse(status)
             time.sleep(float(self.timeInterval))
             print(
-                        "Checked on " + currTimeInSec + ", the class is NOT FOUND")
-            request = scrapy.Request(url=self.start_urls[0], callback=self.parse,dont_filter = True)
+                "Checked on " + currTimeInSec + ", the class is NOT FOUND")
+            request = scrapy.Request(url=self.start_urls[0], callback=self.parse, dont_filter=True)
             yield request
         elif "ERRORURL" in str(contents):
             status = "HTTP ERROR on " + currTimeInSec + " "
             self.update_databse(status)
             time.sleep(float(self.timeInterval))
             print("HTTP ERROR on " + currTimeInSec + " ")
-            request = scrapy.Request(url=self.start_urls[0], callback=self.parse,dont_filter = True)
+            request = scrapy.Request(url=self.start_urls[0], callback=self.parse, dont_filter=True)
             yield request
         else:
             status = "OTHER ERROR on " + currTimeInSec + " "
             self.update_databse(status)
             time.sleep(float(self.timeInterval))
             print("OTHER ERROR on " + currTimeInSec + " ")
-            request = scrapy.Request(url=self.start_urls[0], callback=self.parse,dont_filter = True)
+            request = scrapy.Request(url=self.start_urls[0], callback=self.parse, dont_filter=True)
             yield request
-
 
     def get_local_time(self):
 
         current_time = datetime.datetime.now().strftime("%H:%M")
-        #logging.info("get_local_time(): %s", current_time)
+        # logging.info("get_local_time(): %s", current_time)
 
         return str(current_time)
 
     def get_local_time_inSec(self):
         current_time = datetime.datetime.now().strftime("%H:%M:%S")
-        #logging.info("get_local_time(): %s", current_time)
+        # logging.info("get_local_time(): %s", current_time)
         return str(current_time)
 
-    def check_exists_by_id(self,id, driver):
+    def check_exists_by_id(self, id, driver):
         try:
             driver.find_element_by_id(id)
         except:
             return False
         return True
 
-    def semesterIndex(self,semesterCombo):
+    def semesterIndex(self, semesterCombo):
         if semesterCombo == "Spring+2019":
             return "2191"
         if semesterCombo == "Spring+2020":
@@ -246,37 +268,44 @@ class SeatsfinderbotsSpider(scrapy.Spider):
         if semesterCombo == "Fall+2025":
             return "2257"
 
-    def addClass(self,level, username, password, sectionNum, semesterCombo,currTimeInSec):
+    def addClass(self, level, username, password, sectionNum, semesterCombo, currTimeInSec):
         currTimeInSec = currTimeInSec
-        status = "Found Seat on " + currTimeInSec + " Start adding..."
-        self.update_databse(status)
+        global Coursestatus
+        Coursestatus = "Found Seat on " + currTimeInSec + " Start adding..."
+        self.update_databse(Coursestatus)
         options = webdriver.ChromeOptions()
-        #options.add_argument('--headless')
+        # options.add_argument('--headless')
         options.add_argument('lang=zh_CN.UTF-8')
         options.add_argument('--no-sandbox')
-        #options.add_argument('--headless')
-        options.add_argument('user-agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.82 Safari/537.36"')
-        driver=webdriver.Chrome(chrome_options = options)
+        # options.add_argument('--headless')
+        options.add_argument(
+            'user-agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.82 Safari/537.36"')
+        driver = webdriver.Chrome(chrome_options=options)
         driver.set_window_size(2560, 8000)
 
         STRM = self.semesterIndex(semesterCombo)
 
         driver.get("https://go.oasis.asu.edu/addclass/?STRM=" +
-                   str(STRM) + "&ACAD_CAREER=" + level)
+                   str(STRM) + "&ACAD_CAREER=" + "GRAD")
 
-        driver.switch_to_frame(driver.find_element_by_xpath(
-            "//frame[@src='https://weblogin.asu.edu/cgi-bin/login?callapp=https%3A//go.oasis.asu.edu/waitframeset.html%3Fdelay%3D3500%26url%3Dhttps%253A//cs.oasis.asu.edu/asucsprd/golink/%253F/EMPLOYEE/PSFT_ASUCSPRD/s/WEBLIB_ASU_SA.ASU_SA_ISCRIPT.FieldFormula.IScript_SA%253FURL%253D/EMPLOYEE/PSFT_ASUCSPRD/c/SA_LEARNER_SERVICES.SSR_SSENRL_CART.GBL%25253FSTRM%25253D" + str(
-                STRM) + "%252526ACAD_CAREER%25253D" + level + "%252526Page%25253DSSR_SSENRL_ADD%252526Action%25253DA%252526INSTITUTION%25253DASU00%252526golink%25253DY']"))
-        driver.find_element_by_id("username").send_keys(username)
-        driver.find_element_by_id("password").send_keys(password)
-        driver.find_element_by_class_name("submit").send_keys(Keys.RETURN)
-        if isDuo == 0:
-            time.sleep(0)
-        else:
-            time.sleep(25)
+        #driver.switch_to_frame(driver.find_element_by_xpath("//frame[@src='https://weblogin.asu.edu/cgi-bin/login?callapp=https%3A//go.oasis.asu.edu/waitframeset.html%3Fdelay%3D3500%26url%3Dhttps%253A//cs.oasis.asu.edu/asucsprd/golink/%253F/EMPLOYEE/PSFT_ASUCSPRD/s/WEBLIB_ASU_SA.ASU_SA_ISCRIPT.FieldFormula.IScript_SA%253FURL%253D/EMPLOYEE/PSFT_ASUCSPRD/c/SA_LEARNER_SERVICES.SSR_SSENRL_CART.GBL%25253FSTRM%25253D" + str(STRM) + "%252526ACAD_CAREER%25253D" + level + "%252526Page%25253DSSR_SSENRL_ADD%252526Action%25253DA%252526INSTITUTION%25253DASU00%252526golink%25253DY']"))
         driver.switch_to_frame(0)
-        driver.switch_to_frame(0)
-        driver.switch_to_frame(2)
+        try:
+            driver.find_element_by_id("username").send_keys(username)
+            driver.find_element_by_id("password").send_keys(password)
+            driver.find_element_by_class_name("submit").send_keys(Keys.RETURN)
+
+            if isDuo == 0:
+                time.sleep(5)
+            else:
+                time.sleep(25)
+            driver.switch_to_frame(0)
+            driver.switch_to_frame(0)
+            driver.switch_to_frame(2)
+        except:
+            Coursestatus = "tried add class on " + currTimeInSec + "Wrong UserID/Password"
+            self.update_databse(Coursestatus)
+            driver.close()
 
         time.sleep(1)
 
@@ -307,41 +336,47 @@ class SeatsfinderbotsSpider(scrapy.Spider):
                 "DERIVED_REGFRM1_SSR_PB_SUBMIT").send_keys(Keys.RETURN)
 
             driver.implicitly_wait(10)
-            status = driver.find_element_by_id("win0divSSR_SS_ERD_ER$0").text
+            Coursestatus = driver.find_element_by_id("win0divSSR_SS_ERD_ER$0").text
         except:
-            status = "tried add class on " + currTimeInSec + " Action Fail"
-            self.update_databse(status)
+            Coursestatus = "tried add class on " + currTimeInSec + " Action Fail"
+            self.update_databse(Coursestatus)
 
         FinalStatus = ""
 
-        if "Error" in status:
-            status = "tried add class on " + currTimeInSec + " Action Fail"
-            self.update_databse(status)
-            driver.close()
-            FinalStatus = "FailEnrolled"
+        if "Fail" in Coursestatus:
+            logging.info(Coursestatus)
+            Coursestatus = "tried add class on " + currTimeInSec + " Action Fails"
+            self.update_databse(Coursestatus)
+            #driver.close()
+            Coursestatus = "FailEnrolled"
 
-        elif "Success" in status:
-            status = "tried add class on " + currTimeInSec + " Action Success"
-            self.update_databse(status)
-            
-            FinalStatus = "SuccessEnrolled"
+        elif "Success" in Coursestatus:
+            Coursestatus = "tried add class on " + currTimeInSec + " Action Success"
+            self.update_databse(Coursestatus)
+
+            Coursestatus = "SuccessEnrolled"
+        elif "Wrong UserID" in Coursestatus:
+            Coursestatus = "tried add class on " + currTimeInSec + " Wrong UserID/Pass"
+            self.update_databse(Coursestatus)
 
         else:
-            status = "tried add class on " + currTimeInSec + " UnknownStatus Error"
-            self.update_databse(status)
+            Coursestatus = "tried add class on " + currTimeInSec + " UnknownStatus Error"
+            self.update_databse(Coursestatus)
 
-            FinalStatus = "UnknownStatus"
+            Coursestatus = "UnknownStatus"
         driver.close()
-        return FinalStatus
+        return Coursestatus
 
-    def swapClass(self,level, username, password, sectionNum, swapWith, semesterCombo,currTimeInSec):
+    def swapClass(self, level, username, password, sectionNum, swapWith, semesterCombo, currTimeInSec):
+        global Coursestatus
         options = webdriver.ChromeOptions()
-        #options.add_argument('--headless')
+        # options.add_argument('--headless')
         options.add_argument('lang=zh_CN.UTF-8')
         options.add_argument('--no-sandbox')
-        #options.add_argument('--headless')
-        options.add_argument('user-agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.82 Safari/537.36"')
-        driver=webdriver.Chrome(chrome_options = options)
+        # options.add_argument('--headless')
+        options.add_argument(
+            'user-agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.82 Safari/537.36"')
+        driver = webdriver.Chrome(chrome_options=options)
         driver.set_window_size(2560, 8000)
 
         STRM = self.semesterIndex(semesterCombo)
@@ -349,15 +384,12 @@ class SeatsfinderbotsSpider(scrapy.Spider):
         driver.get("https://go.oasis.asu.edu/swapclass/?STRM=" +
                    str(STRM) + "&ACAD_CAREER=" + level + "&ASU_CLASS_NBR=" + str(sectionNum))
 
-        driver.switch_to_frame(driver.find_element_by_xpath(
-            "//frame[@src='https://weblogin.asu.edu/cgi-bin/login?callapp=https%3A//go.oasis.asu.edu/waitframeset.html%3Fdelay%3D3500%26url%3Dhttps%253A//cs.oasis.asu.edu/asucsprd/golink/%253F/EMPLOYEE/PSFT_ASUCSPRD/s/WEBLIB_ASU_SA.ASU_SA_ISCRIPT.FieldFormula.IScript_SA%253FURL%253D/EMPLOYEE/PSFT_ASUCSPRD/c/SA_LEARNER_SERVICES.SSR_SSENRL_SWAP.GBL%25253FSTRM%25253D" + str(
-                STRM) + "%252526ACAD_CAREER%25253D" + level + "%252526ASU_CLASS_NBR%25253D" + str(
-                sectionNum) + "%252526Page%25253DSSR_SSENRL_SWAP%252526Action%25253DA%252526INSTITUTION%25253DASU00%252526golink%25253DY']"))
+        driver.switch_to_frame(0)
 
         driver.find_element_by_id("username").send_keys(username)
         driver.find_element_by_id("password").send_keys(password)
         driver.find_element_by_class_name("submit").send_keys(Keys.RETURN)
-
+        driver.implicitly_wait(10)
         driver.switch_to_frame(0)
         driver.switch_to_frame(0)
         driver.switch_to_frame(2)
@@ -393,32 +425,32 @@ class SeatsfinderbotsSpider(scrapy.Spider):
                 "DERIVED_REGFRM1_SSR_PB_SUBMIT").send_keys(Keys.RETURN)
 
             driver.implicitly_wait(10)
-            status = driver.find_element_by_id("win0divSSR_SS_ERD_ER$0").text
+            Coursestatus = driver.find_element_by_id("win0divSSR_SS_ERD_ER$0").text
         except:
-            status = "tried add class on " + currTimeInSec + " Action Fail"
-            self.update_databse(status)
+            Coursestatus = "tried swap class on " + currTimeInSec + " Action Fail"
+            self.update_databse(Coursestatus)
 
         FinalStatus = ""
 
-        if "Error" in status:
-            status = "tried add class on " + currTimeInSec + " Action Fail"
+        if "Error" in Coursestatus:
+            status = "tried swap class on " + currTimeInSec + " Action Fail"
             self.update_databse(status)
             driver.close()
             FinalStatus = "FailEnrolled"
-        elif "Success" in status:
-            status = "tried add class on " + currTimeInSec + " Action Success"
-            self.update_databse(status)
+        elif "Success" in Coursestatus:
+            Coursestatus = "tried swap class on " + currTimeInSec + " Action Success"
+            self.update_databse(Coursestatus)
             FinalStatus = "SuccessEnrolled"
         else:
-            status = "tried add class on " + currTimeInSec + " UnknownError"
-            self.update_databse(status)
+            Coursestatus = "tried swap class on " + currTimeInSec + " UnknownError"
+            self.update_databse(Coursestatus)
             driver.close()
             FinalStatus = "UnknownStatus"
 
         return FinalStatus
 
-    def urlErrorCheck(self,url):
-        url = url.replace(' ','')
+    def urlErrorCheck(self, url):
+        url = url.replace(' ', '')
         req = Request(url)
         print('test1%&%&%^&%&^%&^%&')
         print(url)
@@ -449,7 +481,7 @@ class SeatsfinderbotsSpider(scrapy.Spider):
                     urlErrorCheck(statusURL + GUID + "&taskID=" + str(section) +
                                   "&time=" + currTime + "&status=FULL")
                 print(
-                            "Checked on " + currTimeInSec + ", the class is FULL, next check in " + timeInterval + " seconds.")
+                    "Checked on " + currTimeInSec + ", the class is FULL, next check in " + timeInterval + " seconds.")
             elif "OPEN" in str(contents):
                 if choice == "swap":
                     urlErrorCheck(statusURL + GUID + "&taskID=" + str(section) + "&time=" + currTime + "&status=OPEN")
@@ -457,18 +489,18 @@ class SeatsfinderbotsSpider(scrapy.Spider):
                     urlErrorCheck(statusURL + GUID + "&taskID=" + str(section) +
                                   "&time=" + currTime + "&status=OPEN")
                 if choice == "add":
-                    statusAdd = addClass(level, username, password, section, semester,currTimeInSec)
+                    statusAdd = addClass(level, username, password, section, semester, currTimeInSec)
                     urlErrorCheck(
                         superPowerStatusURL + statusAdd + "&email=" + myEmail + "&guid=" + GUID + "&section=" + section)
                 if choice == "swap":
-                    statusSwap = swapClass(level, username, password, section, swapWith, semester,currTimeInSec)
+                    statusSwap = swapClass(level, username, password, section, swapWith, semester, currTimeInSec)
                     urlErrorCheck(
                         superPowerStatusURL + statusSwap + "&email=" + myEmail + "&guid=" + GUID + "&section=" + section)
                 print(
-                            "Checked on " + currTimeInSec + ", the class is OPEN, next check in " + timeInterval + " seconds.")
+                    "Checked on " + currTimeInSec + ", the class is OPEN, next check in " + timeInterval + " seconds.")
             elif "NOT FOUND" in str(contents):
                 print(
-                            "Checked on " + currTimeInSec + ", the class is NOT FOUND, next check in " + timeInterval + " seconds.")
+                    "Checked on " + currTimeInSec + ", the class is NOT FOUND, next check in " + timeInterval + " seconds.")
             elif "ERRORURL" in str(contents):
                 print("HTTP ERROR on " + currTimeInSec + ", next check in " + timeInterval + " seconds.")
             else:
